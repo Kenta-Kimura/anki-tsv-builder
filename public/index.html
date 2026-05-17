@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Anki TSV Builder</title>
+    <link rel="stylesheet" href="/styles.css?v=20260517-2">
+  </head>
+  <body>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <main class="app">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Anki TSV Builder</h1>
+            <p>Numbersまたは単語帳OCRの貼り付けから、Anki用TSVを一括生成します。</p>
+          </div>
+          <div class="actions">
+            <button id="enrichBtn" class="primary" type="button">一括補完</button>
+            <button id="copyBtn" type="button">TSVコピー</button>
+            <button id="downloadBtn" type="button">ダウンロード</button>
+          </div>
+        </header>
+
+        <section class="settings panel">
+          <label>
+            Gemini APIキー
+            <input id="geminiKey" type="text" autocomplete="off" placeholder="AIza...">
+          </label>
+          <label>
+            Geminiモデル
+            <select id="geminiModel">
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            </select>
+          </label>
+          <label class="check">
+            <input id="rememberKey" type="checkbox">
+            このブラウザにAPIキーを保存
+          </label>
+        </section>
+
+        <section class="quota panel" aria-label="Gemini使用量">
+          <div class="quotaItem">
+            <div class="quotaTop">
+              <span>RPM</span>
+              <strong id="rpmText">0 / 5</strong>
+            </div>
+            <div class="meter"><span id="rpmBar"></span></div>
+          </div>
+          <div class="quotaItem">
+            <div class="quotaTop">
+              <span>TPM</span>
+              <strong id="tpmText">0 / 250K</strong>
+            </div>
+            <div class="meter"><span id="tpmBar"></span></div>
+          </div>
+          <div class="quotaItem">
+            <div class="quotaTop">
+              <span>RPD</span>
+              <strong id="rpdText">0 / 20</strong>
+            </div>
+            <div class="meter"><span id="rpdBar"></span></div>
+          </div>
+          <p id="quotaNote">Gemini 2.5 Flash の無料枠目安: RPM 5 / TPM 250K / RPD 20</p>
+        </section>
+
+        <section class="dedupe panel">
+          <div>
+            <h2>既存ノート重複チェック</h2>
+            <p class="hint">Ankiから書き出したタブ区切りtxtを読み込むと、1列目の覚えたい単語だけで重複判定します。</p>
+          </div>
+          <label>
+            既存Ankiノートtxt
+            <input id="existingNotesFile" type="file" accept=".txt,.tsv,text/plain">
+          </label>
+          <label class="check">
+            <input id="caseSensitiveDupes" type="checkbox">
+            大文字小文字を区別する
+          </label>
+          <div id="dupeSummary" class="dupeSummary">既存ノート未読み込み</div>
+        </section>
+
+        <section class="grid">
+          <section class="panel inputPanel">
+            <div class="sectionHeader">
+              <h2>貼り付け入力</h2>
+              <span id="status">入力待ち</span>
+            </div>
+            <div class="inputMode">
+              <fieldset class="modeRadios">
+                <legend>入力形式</legend>
+                <label class="radio">
+                  <input type="radio" name="inputMode" value="numbers" checked>
+                  Numbers
+                </label>
+                <label class="radio">
+                  <input type="radio" name="inputMode" value="ocr">
+                  OCR
+                </label>
+              </fieldset>
+              <label id="ocrFrequencyLabel">
+                OCR用 でる度
+                <input id="ocrFrequency" placeholder="例: A">
+              </label>
+            </div>
+            <section id="ocrPartOfSpeechBlocks" class="ocrPartBlocks hidden">
+              <label>
+                OCR品詞ブロック
+                <textarea id="ocrPartOfSpeechBlocksInput" spellcheck="false" rows="4" placeholder="30 動詞&#10;40 名詞&#10;15 形容詞"></textarea>
+              </label>
+              <p class="hint">上から順に「行数 品詞」で割り当てます。例外は処理結果の品詞欄で行ごとに修正できます。</p>
+            </section>
+            <textarea id="bulkInput" spellcheck="false" rows="12" placeholder="覚えたい単語	空欄つきの文	日本語訳	パス単備考	でる度	品詞&#10;detention	Students may receive (     ) for being late.	拘留	校則違反の罰	A	noun"></textarea>
+            <p id="inputHint" class="hint">貼り付けるだけで自動読み込みします。Numbers列順: 覚えたい単語 / 空欄つきの文 / 日本語訳 / パス単備考 / でる度 / 品詞。</p>
+            <label>
+              すでに知っていた単語
+              <textarea id="knownWordsInput" spellcheck="false" rows="5" placeholder="1行に1語ずつ入力&#10;underestimate&#10;trigger"></textarea>
+            </label>
+            <p class="hint">ここに入力した単語と一致する行は、自動で出力チェックを外します。比較時は前後空白、全角/半角スペース、タブ、改行を除去します。</p>
+          </section>
+
+          <aside class="panel outputPanel">
+            <div class="sectionHeader">
+              <h2>出力TSV</h2>
+              <span id="rowCount">0行</span>
+            </div>
+            <textarea id="tsvOutput" spellcheck="false" rows="12"></textarea>
+            <p class="hint">列: 覚えたい単語 / 空欄つきの文 / 日本語訳 / 発音記号 / 単語の定義 / タイプ2 / 備考 / タグ</p>
+          </aside>
+        </section>
+
+        <section id="progressPanel" class="progressPanel panel" aria-label="一括補完の進捗">
+          <div class="progressTop">
+            <strong id="progressText">補完待機中</strong>
+            <span id="progressCount">0 / 0</span>
+          </div>
+          <div class="progressTrack"><span id="progressBar"></span></div>
+        </section>
+
+        <section class="panel tablePanel">
+          <div class="sectionHeader">
+            <h2>処理結果</h2>
+            <button id="clearBtn" type="button">クリア</button>
+          </div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>出力</th>
+                  <th>単語</th>
+                  <th>品詞</th>
+                  <th>文</th>
+                  <th>日本語訳</th>
+                  <th>発音</th>
+                  <th>定義</th>
+                  <th>備考</th>
+                  <th>タグ</th>
+                  <th>重複</th>
+                  <th>状態</th>
+                </tr>
+              </thead>
+              <tbody id="resultBody">
+                <tr><td colspan="11" class="empty">貼り付けて読み込んでください。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js?v=20260517-3" type="module"></script>
+  </body>
+</html>
