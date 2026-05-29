@@ -142,6 +142,18 @@ Git管理対象外:
 
 ## GitHub管理
 
+ローカル作業場所:
+
+```text
+/Users/kenta/Documents/Codex/Anki TSV Builder
+```
+
+GitHubリポジトリ:
+
+```text
+https://github.com/Kenta-Kimura/anki-tsv-builder.git
+```
+
 初回コミット例:
 
 ```bash
