@@ -1,5 +1,5 @@
 {
-  "name": "anki-pass-tan-tsv-builder",
+  "name": "anki-tsv-builder",
   "displayName": "Anki TSV Builder",
   "version": "0.1.0",
   "private": true,
